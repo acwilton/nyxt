@@ -157,9 +157,14 @@ Example: --with-path bookmarks=/path/to/bookmarks
   (unless *keep-alive*
     (uiop:quit 0 nil)))
 
+;; TODO: Doesn't make sense if history += session?
 (define-command quit-after-clearing-session ()
   "Clear session then quit Nyxt."
-  (uiop:delete-file-if-exists (expand-path (session-path (current-buffer))))
+  (with-data-access (history (history-path (current-buffer)))
+    ;; All the `id's of history-entries are emptied to make sure no buffer will be restored.
+    (htree:do-tree (node history)
+      (setf (id (htree:data node)) "")))
+  (uiop:delete-file-if-exists (expand-path (history-path (current-buffer))))
   (quit))
 
 (define-command start-swank (&optional (swank-port *swank-port*))
@@ -275,19 +280,7 @@ To change the default buffer, e.g. set it to a given URL:
   (make-startup-function
    :buffer-fn (lambda () (make-buffer :url \"https://example.org\")))"
   (lambda (&optional urls)
-    (let ((window (window-make *browser*))
-          (buffer (current-buffer)))
-      ;; Restore session before opening command line URLs, otherwise it will
-      ;; reset the session with the new URLs.
-      (when (and (expand-path (session-path buffer))
-                 (session-list buffer))
-        (match (session-restore-prompt *browser*)
-          ;; Need `funcall-safely' so we continue if the user exits the
-          ;; minibuffer (which raises a condition).
-          (:always-ask (funcall-safely #'restore-session-by-name))
-          (:always-restore (funcall-safely #'restore (data-profile buffer)
-                                           (session-path buffer)))
-          (:never-restore (log:info "Not restoring session."))))
+    (let ((window (window-make *browser*)))
       (if urls
           (open-urls urls)
           (window-set-active-buffer window (funcall-safely buffer-fn))))

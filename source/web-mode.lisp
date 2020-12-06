@@ -308,31 +308,31 @@ Otherwise go forward to the only child."
 (define-command buffer-history-tree (&optional (buffer (current-buffer)))
   "Open a new buffer displaying the whole history tree of a buffer.
 The history node of the children-buffers are included and colored in gray."
-  (let* ((buffer-name (format nil "*History-~a*" (id buffer)))
-         (output-buffer (or (find-if (lambda (b) (string= buffer-name (title b)))
-                                     (buffer-list))
-                            (nyxt/help-mode:help-mode
-                             :activate t :buffer (make-buffer :title buffer-name))))
-         (history (get-data (history-path buffer)))
-         (tree `(:ul ,(htree:map-tree
-                       #'(lambda (node)
-                           `(:li (:a :href ,(object-string (url (htree:data node)))
-                                  ,(let ((title (or (match (title (htree:data node))
-                                                      ((guard e (not (str:emptyp e))) e))
-                                                    (object-display (url (htree:data node))))))
-                                     (if (eq node (htree:current history))
-                                         `(:b ,title)
-                                         title)))))
-                       (buffer-local-history-tree buffer)
-                       :include-root t
-                       :collect-function #'(lambda (a b) `(,@a ,(when b `(:ul ,@b)))))))
-         (content (markup:markup*
-                   '(:h1 "History")
-                   tree))
-         (insert-content (ps:ps (setf (ps:@ document Body |innerHTML|)
-                                      (ps:lisp content)))))
-    (ffi-buffer-evaluate-javascript-async output-buffer insert-content)
-    (set-current-buffer output-buffer)))
+  (with-data-access (history (history-path buffer))
+    (let* ((buffer-name (format nil "*History-~a*" (id buffer)))
+           (output-buffer (or (find-if (lambda (b) (string= buffer-name (title b)))
+                                       (buffer-list))
+                              (nyxt/help-mode:help-mode
+                               :activate t :buffer (make-buffer :title buffer-name))))
+           (tree `(:ul ,(htree:map-tree
+                         #'(lambda (node)
+                             `(:li (:a :href ,(object-string (url (htree:data node)))
+                                       ,(let ((title (or (match (title (htree:data node))
+                                                           ((guard e (not (str:emptyp e))) e))
+                                                         (object-display (url (htree:data node))))))
+                                          (if (eq node (htree:current history))
+                                              `(:b ,title)
+                                              title)))))
+                         (gethash (id buffer) (buffer-local-histories-table history))
+                         :include-root t
+                         :collect-function #'(lambda (a b) `(,@a ,(when b `(:ul ,@b)))))))
+           (content (markup:markup*
+                     '(:h1 "History")
+                     tree))
+           (insert-content (ps:ps (setf (ps:@ document Body |innerHTML|)
+                                        (ps:lisp content)))))
+      (ffi-buffer-evaluate-javascript-async output-buffer insert-content)
+      (set-current-buffer output-buffer))))
 
 (define-command paste ()
   "Paste from clipboard into active-element."
